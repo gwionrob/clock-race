@@ -18,15 +18,27 @@
     font: 16px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
   main { max-width: 960px; margin: 0 auto; padding: 32px 16px 64px; }
   h1 { font-size: 2rem; margin: 0 0 4px; letter-spacing: -0.02em; }
+  h2 { margin-top: 0; }
   .sub { color: var(--muted); margin: 0 0 24px; }
   .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 20px; margin-bottom: 16px; }
-  .controls { display: flex; flex-wrap: wrap; gap: 16px 28px; align-items: end; }
+  .setup { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  .setup .card { border-left: 4px solid var(--a); padding-left: 14px; }
+  .setup .card.b { border-color: var(--b); }
+  .setup h3 { margin: 0 0 10px; font-size: 1rem; }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; }
+  .controls { display: flex; flex-wrap: wrap; gap: 12px 20px; align-items: end; margin-top: 18px;
+    padding-top: 18px; border-top: 1px solid var(--line); }
   label { display: flex; flex-direction: column; gap: 4px; font-size: 0.85rem; color: var(--muted); }
-  input[type=number] { width: 110px; font: inherit; font-size: 1.1rem; padding: 6px 10px; border-radius: 8px;
+  input[type=number], input[type=time] { font: inherit; font-size: 1.05rem; padding: 6px 10px; border-radius: 8px;
     border: 1px solid var(--line); background: var(--bg); color: var(--ink); }
+  input[type=number] { width: 90px; }
+  label > input { align-self: flex-start; }
   select, button { font: inherit; padding: 7px 12px; border-radius: 8px; border: 1px solid var(--line);
     background: var(--bg); color: var(--ink); cursor: pointer; }
   button.primary { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+  .chip { padding: 5px 10px; font-size: 0.9rem; border-radius: 999px; }
+  .chip.on { background: var(--b); border-color: var(--b); color: #fff; }
+  .plain { color: var(--muted); font-size: 0.92rem; margin: 0; }
   .clocks { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; text-align: center; }
   .clocks svg { width: 100%; max-width: 260px; height: auto; }
   .clocks h3 { margin: 4px 0 0; font-size: 1rem; }
@@ -35,24 +47,30 @@
     font-variant-numeric: tabular-nums; }
   .status > :last-child { text-align: right; }
   /* Fixed-width value slots so labels never shift as numbers change length. */
-  .status b { display: inline-block; text-align: left; }
+  .status b { display: inline-block; text-align: left; font-size: 1.1rem; }
   #elapsed { min-width: 11ch; }
   #count { min-width: 4ch; }
   #next { min-width: 11ch; text-align: right; }
-  @media (max-width: 640px) { .status { grid-template-columns: 1fr; } .status > :last-child { text-align: left; } }
-  .status b { font-size: 1.1rem; }
   .flash { color: var(--hit); font-weight: 700; transition: opacity .4s; }
-  .answers { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+  .headline { font-size: 1.25rem; line-height: 1.45; margin: 0 0 16px; }
+  .answers { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
   .stat { border: 1px solid var(--line); border-radius: 10px; padding: 12px; }
   .stat .k { font-size: 0.8rem; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
-  .stat .v { font-size: 1.6rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .stat .v { font-size: 1.8rem; font-weight: 700; font-variant-numeric: tabular-nums; }
   .stat .n { font-size: 0.8rem; color: var(--muted); }
   .timeline { width: 100%; height: 70px; display: block; }
-  .math { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.92rem;
-    background: var(--bg); border-radius: 8px; padding: 12px; overflow-x: auto; white-space: pre; }
+  .why p { margin: 0 0 10px; }
+  details { margin-top: 12px; }
+  summary { cursor: pointer; color: var(--muted); }
+  .math { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.9rem;
+    background: var(--bg); border-radius: 8px; padding: 12px; overflow-x: auto; white-space: pre; margin-top: 8px; }
   .hint { color: var(--muted); font-size: 0.9rem; }
   @media (max-width: 640px) {
-    .answers { grid-template-columns: 1fr 1fr; }
+    .setup { grid-template-columns: 1fr; }
+    .answers { grid-template-columns: 1fr; }
+    .status { grid-template-columns: 1fr; }
+    .status > :last-child { text-align: left; }
+    #next { text-align: left; }
     h1 { font-size: 1.6rem; }
   }
 </style>
@@ -60,66 +78,86 @@
 <body>
 <main>
   <h1>Clock Race</h1>
-  <p class="sub">Two clocks start together at midnight. One runs at normal speed, the other at <b>1/x</b> speed.
-    How often do they show the same time?</p>
+  <p class="sub">Two clocks: one keeps normal time, the other runs slow (or fast).
+    How often do they end up showing the same time?</p>
 
-  <section class="panel controls">
-    <label>x (slow clock runs at 1/x speed)
-      <input id="x" type="number" value="2" min="0.05" step="0.1">
-    </label>
-    <label>Dial
-      <select id="dial">
-        <option value="12">12-hour (normal analog clock)</option>
-        <option value="24">24-hour</option>
-      </select>
-    </label>
-    <label>Simulation speed
-      <select id="speed">
-        <option value="0.25">15 min / sec</option>
-        <option value="1" selected>1 h / sec</option>
-        <option value="2">2 h / sec</option>
-        <option value="6">6 h / sec</option>
-        <option value="24">1 day / sec</option>
-      </select>
-    </label>
-    <button id="play" class="primary">Pause</button>
-    <button id="reset">Reset</button>
+  <section class="panel">
+    <div class="setup">
+      <div class="card">
+        <h3 style="color:var(--a)">Clock A: a normal clock</h3>
+        <label>Starts at <input id="startA" type="time" value="00:00"></label>
+      </div>
+      <div class="card b">
+        <h3 style="color:var(--b)">Clock B: the odd one</h3>
+        <div class="row">
+          <label>Starts at <input id="startB" type="time" value="00:00"></label>
+        </div>
+        <div class="row" id="presets"></div>
+        <div class="row">
+          <label>Or type a speed (% of normal)
+            <input id="pct" type="number" value="50" min="0" max="1000" step="5">
+          </label>
+        </div>
+        <p class="plain" id="plainSpeed"></p>
+      </div>
+    </div>
+
+    <div class="controls">
+      <label>Clock face
+        <select id="dial">
+          <option value="12">Normal (12 hours)</option>
+          <option value="24">24-hour</option>
+        </select>
+      </label>
+      <label>Playback speed
+        <select id="speed">
+          <option value="0.25">15 min per second</option>
+          <option value="1" selected>1 hour per second</option>
+          <option value="2">2 hours per second</option>
+          <option value="6">6 hours per second</option>
+          <option value="24">1 day per second</option>
+        </select>
+      </label>
+      <button id="play" class="primary">Pause</button>
+      <button id="reset">Restart</button>
+    </div>
   </section>
 
   <section class="panel">
     <div class="clocks">
-      <div><svg id="clockA" viewBox="-110 -110 220 220"></svg><h3 style="color:var(--a)">Normal clock</h3><div class="t" id="tA"></div></div>
+      <div><svg id="clockA" viewBox="-110 -110 220 220"></svg><h3 style="color:var(--a)">Clock A</h3><div class="t" id="tA"></div></div>
       <div><svg id="clockB" viewBox="-110 -110 220 220"></svg><h3 style="color:var(--b)" id="labelB"></h3><div class="t" id="tB"></div></div>
     </div>
     <div class="status">
-      <span>Real time elapsed: <b id="elapsed"></b></span>
-      <span>Matches so far: <b id="count">0</b> <span id="flash" class="flash" style="opacity:0">● MATCH</span></span>
+      <span>Time passed: <b id="elapsed"></b></span>
+      <span>Times they matched: <b id="count">0</b> <span id="flash" class="flash" style="opacity:0">● MATCH</span></span>
       <span>Next match in: <b id="next"></b></span>
     </div>
   </section>
 
   <section class="panel">
-    <h2 style="margin-top:0">The answer</h2>
+    <h2>The answer</h2>
+    <p class="headline" id="headline"></p>
     <div class="answers">
-      <div class="stat"><div class="k">They match every</div><div class="v" id="period"></div><div class="n">real time</div></div>
-      <div class="stat"><div class="k">Per day</div><div class="v" id="perDay"></div><div class="n" id="perDayN"></div></div>
-      <div class="stat"><div class="k">Per week</div><div class="v" id="perWeek"></div><div class="n" id="perWeekN"></div></div>
-      <div class="stat"><div class="k">Per 30-day month</div><div class="v" id="perMonth"></div><div class="n" id="perMonthN"></div></div>
+      <div class="stat"><div class="k">In the first day</div><div class="v" id="perDay"></div><div class="n" id="perDayN"></div></div>
+      <div class="stat"><div class="k">In the first week</div><div class="v" id="perWeek"></div><div class="n" id="perWeekN"></div></div>
+      <div class="stat"><div class="k">In the first 30 days</div><div class="v" id="perMonth"></div><div class="n" id="perMonthN"></div></div>
     </div>
-    <p class="hint">Counts are matches <i>after</i> the shared midnight start (add 1 if you count the start itself).
-      Non-integer rates are the long-run average.</p>
+    <p class="hint">If both clocks start at the same time, that starting moment isn't counted.</p>
 
     <h3>Every match in one
-      <select id="range"><option value="24">day</option><option value="168" selected>week</option><option value="720">30-day month</option></select>
+      <select id="range"><option value="24">day</option><option value="168" selected>week</option><option value="720">30 days</option></select>
     </h3>
     <svg class="timeline" id="timeline"></svg>
   </section>
 
-  <section class="panel">
-    <h2 style="margin-top:0">Why</h2>
-    <div class="math" id="math"></div>
-    <p class="hint">Sanity check: as x → ∞ the slow clock basically stops, and a stopped clock is right
-      <b>twice a day</b> (12-hour dial). At x = 1 they're the same clock and agree constantly.</p>
+  <section class="panel why">
+    <h2>Why?</h2>
+    <div id="why"></div>
+    <details>
+      <summary>Show the algebra</summary>
+      <div class="math" id="math"></div>
+    </details>
   </section>
 </main>
 
@@ -132,6 +170,13 @@ const el = (tag, attrs, parent) => {
   if (parent) parent.appendChild(e);
   return e;
 };
+const mod = (a, m) => ((a % m) + m) % m;
+const EPS = 1e-9;
+
+const PRESETS = [
+  ["Stopped", 0], ["Quarter speed", 25], ["A third", 100 / 3], ["Half speed", 50],
+  ["Three-quarters", 75], ["Twice as fast", 200],
+];
 
 function buildClock(svg, color) {
   el("circle", { r: 100, fill: "var(--panel)", stroke: "var(--line)", "stroke-width": 4 }, svg);
@@ -160,92 +205,163 @@ function drawNumbers(c, dial) {
 const A = buildClock($("clockA"), "var(--a)");
 const B = buildClock($("clockB"), "var(--b)");
 
-let x = 2, dial = 12, simHours = 0, playing = true, last = null, count = 0, flashUntil = 0;
+// State. r = Clock B's speed as a fraction of normal (0.5 = half speed).
+let r = 0.5, dial = 12, a0 = 0, b0 = 0, simHours = 0, playing = true, last = null, count = 0, flashUntil = 0;
+// Match schedule: first match at t1, then every p hours. mode: "always" | "never" | "periodic".
+let sched = { mode: "periodic", t1: 0, p: 24 };
 
+const parseTime = v => { const [h, m] = (v || "00:00").split(":").map(Number); return h + m / 60; };
 const fmtClock = h => {
-  h = ((h % 24) + 24) % 24;
-  const hh = Math.floor(h), mm = Math.floor((h - hh) * 60);
+  h = mod(h, 24);
+  const hh = Math.floor(h), mm = Math.floor((h - hh) * 60 + EPS);
   return String(hh).padStart(2, "0") + ":" + String(mm).padStart(2, "0");
 };
+// Fixed-width format for the live status line.
 const fmtDur = h => {
   if (!isFinite(h)) return "never";
   if (h < 1) return (h * 60).toFixed(1) + " min";
   if (h < 48) return h.toFixed(2) + " h";
   return (h / 24).toFixed(2) + " days";
 };
-const fmtNum = n => Number.isInteger(n) ? String(n) : n.toFixed(2);
+// Friendly format for sentences: "24 hours", "13 hours 5 minutes", "2.5 days".
+const plural = (n, w) => `${n} ${w}${n === 1 ? "" : "s"}`;
+const fmtHuman = h => {
+  const totalMin = Math.round(h * 60);
+  if (totalMin < 60) return plural(totalMin, "minute");
+  if (h < 72) {
+    const hh = Math.floor(totalMin / 60), mm = totalMin % 60;
+    return plural(hh, "hour") + (mm ? " " + plural(mm, "minute") : "");
+  }
+  return `${+(h / 24).toFixed(1)} days`;
+};
+const perDayText = n => Math.abs(n - Math.round(n)) < 1e-6
+  ? `<b>${plural(Math.round(n), "time")} a day</b>`
+  : `about <b>${+n.toFixed(2)} times a day</b> on average`;
+const speedName = r => {
+  const p = r * 100;
+  for (const [name, v] of PRESETS) if (Math.abs(v - p) < 0.01) return name.toLowerCase();
+  if (Math.abs(p - 100) < 0.01) return "normal speed";
+  return `${+p.toFixed(1)}% speed`;
+};
 
 function setHands(c, hours, lapsPerSec) {
   // A minute hand doing more than ~1 lap/sec just strobes, so fade it out.
   c.min.style.opacity = Math.max(0.15, Math.min(1, 1.5 - lapsPerSec * 0.5));
-  // hour hand: one lap per dial; minute hand: one lap per hour
-  const hDeg = (hours % dial) / dial * 360;
-  const mDeg = (hours % 1) * 360;
-  c.hour.setAttribute("transform", `rotate(${hDeg})`);
-  c.min.setAttribute("transform", `rotate(${mDeg})`);
+  c.hour.setAttribute("transform", `rotate(${mod(hours, dial) / dial * 360})`);
+  c.min.setAttribute("transform", `rotate(${mod(hours, 1) * 360})`);
 }
 
-// Relative drift per real hour, and the gap between matches.
-const drift = () => Math.abs(1 - 1 / x);
-const period = () => drift() === 0 ? 0 : dial / drift();
+// Clock A shows a0 + t, Clock B shows b0 + r·t. The faces match whenever the
+// gap between them is a whole number of laps (dial hours).
+function schedule() {
+  const g0 = a0 - b0, d = 1 - r;
+  if (Math.abs(d) < EPS) return { mode: mod(g0, dial) < EPS ? "always" : "never" };
+  const p = dial / Math.abs(d);
+  let t1 = (d > 0 ? mod(-g0, dial) : mod(g0, dial)) / Math.abs(d);
+  if (t1 > p - EPS) t1 = 0;
+  return { mode: "periodic", t1, p };
+}
+
+// Matches with time in (0, H], i.e. not counting a shared starting moment.
+function matchesUpTo(H) {
+  if (sched.mode !== "periodic") return sched.mode === "always" ? Infinity : 0;
+  const { t1, p } = sched;
+  if (t1 < EPS) return Math.floor(H / p + EPS);
+  return t1 > H + EPS ? 0 : Math.floor((H - t1) / p + EPS) + 1;
+}
 
 function recompute() {
-  x = Math.max(0.05, parseFloat($("x").value) || 1);
+  r = Math.max(0, parseFloat($("pct").value) || 0) / 100;
   dial = +$("dial").value;
+  a0 = parseTime($("startA").value);
+  b0 = parseTime($("startB").value);
+  sched = schedule();
   drawNumbers(A, dial); drawNumbers(B, dial);
-  $("labelB").textContent = x === 1 ? "Same speed" : x > 1 ? `Slow clock (1/${fmtNum(x)} speed)` : `Fast clock (${fmtNum(1 / x)}× speed)`;
 
-  const p = period();
-  const always = p === 0;
-  $("period").textContent = always ? "always" : fmtDur(p);
-  const rows = [["perDay", 24], ["perWeek", 168], ["perMonth", 720]];
-  for (const [id, H] of rows) {
-    if (always) { $(id).textContent = "∞"; $(id + "N").textContent = "identical clocks"; continue; }
-    const exact = H / p;
-    $(id).textContent = Math.floor(exact + 1e-9);
-    $(id + "N").textContent = Number.isInteger(+exact.toFixed(9)) ? "exactly" : `avg ${exact.toFixed(3)}`;
+  for (const b of $("presets").children) b.classList.toggle("on", Math.abs(+b.dataset.pct - r * 100) < 0.01);
+  $("labelB").textContent = `Clock B (${speedName(r)})`;
+
+  $("plainSpeed").textContent =
+    r === 0 ? "Clock B doesn't move at all." :
+    r === 1 ? "Clock B keeps normal time, same as Clock A." :
+    `For every hour that really passes, Clock B moves ${fmtHuman(r)}` +
+    (r < 1 ? `, so it falls ${fmtHuman(1 - r)} behind every hour.` : `, so it gains ${fmtHuman(r - 1)} every hour.`);
+
+  // Headline
+  const same = mod(a0 - b0, dial) < EPS;
+  if (sched.mode === "always") $("headline").textContent = "They're the same clock, so they always show the same time.";
+  else if (sched.mode === "never") $("headline").textContent = "They tick at the same speed but started at different times, so they never match.";
+  else {
+    const { t1, p } = sched;
+    const first = t1 < EPS ? "" : `They first show the same time after <b>${fmtHuman(t1)}</b>, then `;
+    $("headline").innerHTML = (first ? first : "They show the same time ") +
+      `<b>every ${fmtHuman(p)}</b>. That's ${perDayText(24 / p)}.`;
   }
 
-  const d = drift();
+  for (const [id, H] of [["perDay", 24], ["perWeek", 168], ["perMonth", 720]]) {
+    const n = matchesUpTo(H);
+    $(id).textContent = n === Infinity ? "Always" : n;
+    $(id + "N").textContent = n === Infinity ? "" : n === 1 ? "time" : "times";
+  }
+
+  // Plain-English explanation
+  const lap = dial === 12 ? "12 hours" : "24 hours";
+  let why;
+  if (sched.mode === "always") why = `<p>Both clocks show the same time and tick at the same speed, so neither one ever gets ahead.</p>`;
+  else if (sched.mode === "never") why = `<p>Both clocks tick at the same speed, so the gap between them never changes. They started apart, so they stay apart.</p>`;
+  else {
+    const ahead = r < 1 ? "Clock A" : "Clock B";
+    why = `<p>Every hour, ${ahead} gets <b>${fmtHuman(Math.abs(1 - r))}</b> further ahead of the other clock.</p>
+      <p>A clock face repeats every <b>${lap}</b>. So whenever one clock is exactly ${lap} ahead,
+        both faces look identical, like a runner lapping someone on a track.</p>
+      <p>Pulling ${lap} ahead at ${fmtHuman(Math.abs(1 - r))} per hour takes
+        <b>${lap} ÷ ${fmtHuman(Math.abs(1 - r))} = ${fmtHuman(sched.p)}</b>.</p>` +
+      (same ? "" : `<p>The clocks didn't start together, so they're already part of the way to a match.
+        That's why the first one comes sooner, after ${fmtHuman(sched.t1)}, and then every ${fmtHuman(sched.p)} after that.</p>`) +
+      `<p class="hint">Sanity check: if Clock B is stopped, it's right exactly twice a day, just like the saying about a broken clock.</p>`;
+  }
+  $("why").innerHTML = why;
+
+  const d = 1 - r;
   $("math").textContent =
-`Normal clock after t real hours shows:   t
-Other clock after t real hours shows:    t / x  =  t / ${fmtNum(x)}
+`Let s = Clock B's speed (${+r.toFixed(4)}), t = real hours passed.
+Clock A shows  ${fmtClock(a0)} + t
+Clock B shows  ${fmtClock(b0)} + s·t
 
-They show the same time when the gap is a whole number of dial laps (${dial} h):
-  t − t/x  =  k · ${dial}
-  t · |1 − 1/x|  =  k · ${dial}
-  t  =  k · ${dial} / |1 − 1/x|  =  k · ${always ? "∞" : fmtNum(+p.toFixed(4))} h
+The faces match when the gap is a whole number of laps (${dial} h):
+  (${+a0.toFixed(3)} − ${+b0.toFixed(3)}) + t·(1 − s)  =  k · ${dial}
 
-So matches per day  =  24 · |1 − 1/x| / ${dial}  =  ${always ? "∞" : fmtNum(+(24 * d / dial).toFixed(4))}`;
+So matches are ${sched.mode === "periodic" ? +sched.p.toFixed(4) : "∞"} h apart  ( = ${dial} / |1 − s| ),
+the first at t = ${sched.mode === "periodic" ? +sched.t1.toFixed(4) : "—"} h.
+Matches per day (long run) = 24 · |1 − s| / ${dial} = ${+(24 * Math.abs(d) / dial).toFixed(4)}`;
 
   drawTimeline();
   resetSim();
 }
 
 function drawTimeline() {
-  const svg = $("timeline"), H = +$("range").value, p = period();
+  const svg = $("timeline"), H = +$("range").value;
   svg.innerHTML = "";
-  const W = svg.clientWidth || 800, pad = 12, y = 30;
+  const W = svg.clientWidth || 800, pad = 28, y = 30;
   svg.setAttribute("viewBox", `0 0 ${W} 70`);
   const sx = h => pad + (h / H) * (W - 2 * pad);
   el("line", { x1: pad, x2: W - pad, y1: y, y2: y, stroke: "var(--line)", "stroke-width": 4, "stroke-linecap": "round" }, svg);
-  // day ticks
-  const dayStep = H > 200 ? 168 : 24;
-  for (let d = 0; d <= H; d += (H === 24 ? 6 : dayStep)) {
+  const step = H === 24 ? 6 : H > 200 ? 168 : 24;
+  for (let d = 0; d <= H; d += step) {
     el("line", { x1: sx(d), x2: sx(d), y1: y + 6, y2: y + 12, stroke: "var(--muted)" }, svg);
     const t = el("text", { x: sx(d), y: y + 28, "text-anchor": "middle", "font-size": 11, fill: "var(--muted)" }, svg);
-    t.textContent = H === 24 ? `${d}h` : dayStep === 168 ? `wk ${d / 168}` : `day ${d / 24}`;
+    t.textContent = H === 24 ? `${d}h` : step === 168 ? `week ${d / 168}` : `day ${d / 24}`;
   }
-  if (p === 0) return;
-  const n = Math.floor(H / p + 1e-9);
+  el("circle", { cx: sx(0), cy: y, r: 4, fill: "var(--muted)" }, svg);
+  if (sched.mode !== "periodic") return;
+  const n = matchesUpTo(H);
   if (n > 400) {
     const t = el("text", { x: W / 2, y: y - 10, "text-anchor": "middle", "font-size": 12, fill: "var(--hit)" }, svg);
-    t.textContent = `${n} matches — too many to draw`;
+    t.textContent = `${n} matches, too many to draw`;
     return;
   }
-  for (let k = 0; k <= n; k++) {
-    el("circle", { cx: sx(k * p), cy: y, r: k === 0 ? 4 : 6, fill: k === 0 ? "var(--muted)" : "var(--hit)" }, svg);
-  }
+  for (let t = sched.t1 < EPS ? sched.p : sched.t1; t <= H + EPS; t += sched.p)
+    el("circle", { cx: sx(t), cy: y, r: 6, fill: "var(--hit)" }, svg);
 }
 
 function resetSim() { simHours = 0; count = 0; last = null; }
@@ -255,24 +371,34 @@ function frame(ts) {
   // Clamp dt so a backgrounded tab doesn't jump the clocks forward.
   if (last !== null && playing) simHours += Math.min(ts - last, 100) / 1000 * speed;
   last = ts;
-  const p = period();
-  if (p > 0) {
-    const c = Math.floor(simHours / p + 1e-9);
-    if (c > count) flashUntil = ts + 700;
-    count = c;
-  }
-  setHands(A, simHours, playing ? speed : 0);
-  setHands(B, simHours / x, playing ? speed / x : 0);
-  $("tA").textContent = fmtClock(simHours);
-  $("tB").textContent = fmtClock(simHours / x);
+  const c = matchesUpTo(simHours);
+  if (c !== Infinity && c > count) flashUntil = ts + 700;
+  count = c;
+  setHands(A, a0 + simHours, playing ? speed : 0);
+  setHands(B, b0 + r * simHours, playing ? speed * r : 0);
+  $("tA").textContent = fmtClock(a0 + simHours);
+  $("tB").textContent = fmtClock(b0 + r * simHours);
   $("elapsed").textContent = `${Math.floor(simHours / 24)}d ${fmtClock(simHours)}`;
-  $("count").textContent = p === 0 ? "∞" : count;
-  $("next").textContent = p === 0 ? "now" : fmtDur((count + 1) * p - simHours);
+  $("count").textContent = c === Infinity ? "always" : c;
+  let next = "never";
+  if (sched.mode === "always") next = "now";
+  else if (sched.mode === "periodic") {
+    const { t1, p } = sched;
+    const k = simHours < t1 ? 0 : Math.floor((simHours - t1) / p + EPS) + 1;
+    next = fmtDur(t1 + k * p - simHours);
+  }
+  $("next").textContent = next;
   $("flash").style.opacity = ts < flashUntil ? 1 : 0;
   requestAnimationFrame(frame);
 }
 
-$("x").addEventListener("input", recompute);
+for (const [name, v] of PRESETS) {
+  const b = document.createElement("button");
+  b.className = "chip"; b.textContent = name; b.dataset.pct = v;
+  b.addEventListener("click", () => { $("pct").value = +v.toFixed(4); recompute(); });
+  $("presets").appendChild(b);
+}
+for (const id of ["pct", "startA", "startB"]) $(id).addEventListener("input", recompute);
 $("dial").addEventListener("change", recompute);
 $("range").addEventListener("change", drawTimeline);
 $("reset").addEventListener("click", resetSim);

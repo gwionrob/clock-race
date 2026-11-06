@@ -49,6 +49,14 @@ Add one if you want to count it.
 
 There's also a 24-hour dial toggle. With a 24-hour face every number above halves.
 
+### Different start times
+
+You can set a start time for each clock. They still match every `12 / |1 − 1/x|` hours, but the first match comes sooner because the clocks are already part of the way there. If Clock A is `g` hours ahead at the start, the first match is at `(12 − g) / (1 − 1/x)` hours, wrapping `g` to the 0–12 range. That assumes the slow clock is the one being lapped.
+
+### Plain-English mode
+
+The page doesn't make you think in "1/x". You pick Clock B's speed from buttons like *Half speed* or *Quarter speed*, or type a percentage. The answer and explanation are written in plain sentences. The algebra is still there behind a "Show the algebra" toggle for anyone who wants it.
+
 ## Running it
 
 It's one static HTML file with no build step:
