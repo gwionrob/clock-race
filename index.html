@@ -31,8 +31,15 @@
   .clocks svg { width: 100%; max-width: 260px; height: auto; }
   .clocks h3 { margin: 4px 0 0; font-size: 1rem; }
   .clocks .t { font-variant-numeric: tabular-nums; color: var(--muted); }
-  .status { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; margin-top: 12px;
+  .status { display: grid; grid-template-columns: 1fr auto 1fr; gap: 8px; margin-top: 12px;
     font-variant-numeric: tabular-nums; }
+  .status > :last-child { text-align: right; }
+  /* Fixed-width value slots so labels never shift as numbers change length. */
+  .status b { display: inline-block; text-align: left; }
+  #elapsed { min-width: 11ch; }
+  #count { min-width: 4ch; }
+  #next { min-width: 11ch; text-align: right; }
+  @media (max-width: 640px) { .status { grid-template-columns: 1fr; } .status > :last-child { text-align: left; } }
   .status b { font-size: 1.1rem; }
   .flash { color: var(--hit); font-weight: 700; transition: opacity .4s; }
   .answers { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
@@ -68,8 +75,9 @@
     </label>
     <label>Simulation speed
       <select id="speed">
-        <option value="0.5">30 min / sec</option>
-        <option value="2" selected>2 h / sec</option>
+        <option value="0.25">15 min / sec</option>
+        <option value="1" selected>1 h / sec</option>
+        <option value="2">2 h / sec</option>
         <option value="6">6 h / sec</option>
         <option value="24">1 day / sec</option>
       </select>
@@ -161,13 +169,15 @@ const fmtClock = h => {
 };
 const fmtDur = h => {
   if (!isFinite(h)) return "never";
-  if (h < 1) return (h * 60).toFixed(1).replace(/\.0$/, "") + " min";
-  if (h < 48) return (+h.toFixed(2)) + " h";
-  return (+(h / 24).toFixed(2)) + " days";
+  if (h < 1) return (h * 60).toFixed(1) + " min";
+  if (h < 48) return h.toFixed(2) + " h";
+  return (h / 24).toFixed(2) + " days";
 };
 const fmtNum = n => Number.isInteger(n) ? String(n) : n.toFixed(2);
 
-function setHands(c, hours) {
+function setHands(c, hours, lapsPerSec) {
+  // A minute hand doing more than ~1 lap/sec just strobes, so fade it out.
+  c.min.style.opacity = Math.max(0.15, Math.min(1, 1.5 - lapsPerSec * 0.5));
   // hour hand: one lap per dial; minute hand: one lap per hour
   const hDeg = (hours % dial) / dial * 360;
   const mDeg = (hours % 1) * 360;
@@ -241,7 +251,9 @@ function drawTimeline() {
 function resetSim() { simHours = 0; count = 0; last = null; }
 
 function frame(ts) {
-  if (last !== null && playing) simHours += (ts - last) / 1000 * +$("speed").value;
+  const speed = +$("speed").value;
+  // Clamp dt so a backgrounded tab doesn't jump the clocks forward.
+  if (last !== null && playing) simHours += Math.min(ts - last, 100) / 1000 * speed;
   last = ts;
   const p = period();
   if (p > 0) {
@@ -249,8 +261,8 @@ function frame(ts) {
     if (c > count) flashUntil = ts + 700;
     count = c;
   }
-  setHands(A, simHours);
-  setHands(B, simHours / x);
+  setHands(A, simHours, playing ? speed : 0);
+  setHands(B, simHours / x, playing ? speed / x : 0);
   $("tA").textContent = fmtClock(simHours);
   $("tB").textContent = fmtClock(simHours / x);
   $("elapsed").textContent = `${Math.floor(simHours / 24)}d ${fmtClock(simHours)}`;
