@@ -51,7 +51,20 @@
   #elapsed { min-width: 11ch; }
   #count { min-width: 4ch; }
   #next { min-width: 11ch; text-align: right; }
-  .flash { color: var(--hit); font-weight: 700; transition: opacity .4s; }
+  .stage { position: relative; overflow: hidden; }
+  .stage .clocks svg { transform-origin: 50% 50%; }
+  #fx { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+  #kapow { position: absolute; left: 50%; top: 42%; transform: translate(-50%, -50%) scale(0) rotate(-8deg);
+    font-size: clamp(2.5rem, 9vw, 5.5rem); font-weight: 900; letter-spacing: -0.03em; color: var(--hit);
+    -webkit-text-stroke: 3px var(--panel); paint-order: stroke fill; pointer-events: none; white-space: nowrap; }
+  #kapow.go { animation: kapow 1.1s cubic-bezier(.2, 1.6, .4, 1) forwards; }
+  @keyframes kapow {
+    0% { transform: translate(-50%, -50%) scale(0) rotate(-8deg); opacity: 1; }
+    25% { transform: translate(-50%, -50%) scale(1.15) rotate(-4deg); }
+    70% { transform: translate(-50%, -50%) scale(1) rotate(-4deg); opacity: 1; }
+    100% { transform: translate(-50%, -50%) scale(1.3) rotate(-4deg); opacity: 0; }
+  }
+  .tension { color: var(--b); font-weight: 700; }
   .given { color: var(--muted); margin: 0 0 6px; }
   .headline { font-size: 1.25rem; line-height: 1.45; margin: 0 0 16px; }
   .answers { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
@@ -121,19 +134,23 @@
       </label>
       <button id="play" class="primary">Pause</button>
       <button id="reset">Restart</button>
+      <button id="drama" aria-pressed="true">Drama: on</button>
+      <button id="sound" aria-pressed="false">Sound: off</button>
     </div>
   </section>
 
-  <section class="panel">
+  <section class="panel stage" id="stage">
     <div class="clocks">
       <div><svg id="clockA" viewBox="-110 -110 220 220"></svg><h3 style="color:var(--a)">Clock A</h3><div class="t" id="tA"></div></div>
       <div><svg id="clockB" viewBox="-110 -110 220 220"></svg><h3 style="color:var(--b)" id="labelB"></h3><div class="t" id="tB"></div></div>
     </div>
     <div class="status">
       <span>Time passed: <b id="elapsed"></b></span>
-      <span>Times they matched: <b id="count">0</b> <span id="flash" class="flash" style="opacity:0">● MATCH</span></span>
+      <span>Times they matched: <b id="count">0</b></span>
       <span>Next match in: <b id="next"></b></span>
     </div>
+    <canvas id="fx"></canvas>
+    <div id="kapow">MATCH!</div>
   </section>
 
   <section class="panel">
@@ -189,10 +206,12 @@ function buildClock(svg, color) {
       stroke: "var(--muted)", "stroke-width": big ? 3 : 1 }, svg);
   }
   const numbers = el("g", {}, svg);
+  const ghost = el("line", { x1: 0, y1: 0, x2: 0, y2: -50, stroke: "var(--muted)", "stroke-width": 7,
+    "stroke-linecap": "round", "stroke-dasharray": "2 9", opacity: 0 }, svg);
   const hour = el("line", { x1: 0, y1: 0, x2: 0, y2: -50, stroke: color, "stroke-width": 7, "stroke-linecap": "round" }, svg);
   const min = el("line", { x1: 0, y1: 0, x2: 0, y2: -78, stroke: color, "stroke-width": 4, "stroke-linecap": "round" }, svg);
   el("circle", { r: 6, fill: color }, svg);
-  return { hour, min, numbers };
+  return { hour, min, numbers, ghost, svg };
 }
 
 function drawNumbers(c, dial) {
@@ -209,7 +228,10 @@ const A = buildClock($("clockA"), "var(--a)");
 const B = buildClock($("clockB"), "var(--b)");
 
 // State. r = Clock B's speed as a fraction of normal (0.5 = half speed).
-let r = 0.5, dial = 12, a0 = 0, b0 = 0, simHours = 0, playing = true, last = null, count = 0, flashUntil = 0;
+let r = 0.5, dial = 12, a0 = 0, b0 = 0, simHours = 0, playing = true, last = null, count = 0;
+// Drama: heartbeat/slow-mo as a match nears, freeze + burst when it lands.
+let drama = true, sound = false, holdUntil = 0, beatPhase = 0, shakeUntil = 0, audio = null;
+const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
 // Match schedule: first match at t1, then every p hours. mode: "always" | "never" | "periodic".
 let sched = { mode: "periodic", t1: 0, p: 24 };
 
@@ -390,20 +412,47 @@ function drawTimeline() {
     el("circle", { cx: sx(t), cy: y, r: 6, fill: "var(--hit)" }, svg);
 }
 
-function resetSim() { simHours = 0; count = 0; last = null; }
+function resetSim() { simHours = 0; count = 0; last = null; holdUntil = 0; }
+
+// Real time of the next match strictly after t, or Infinity.
+function nextMatchAfter(t) {
+  if (sched.mode !== "periodic") return Infinity;
+  const { t1, p } = sched;
+  const k = t < t1 - EPS ? 0 : Math.floor((t - t1) / p + EPS) + 1;
+  return t1 + k * p;
+}
+
+// 0 = nowhere near, 1 = about to match. Measured in on-screen seconds so it
+// feels the same at any playback speed.
+function tension(speed) {
+  if (!drama || sched.mode !== "periodic") return 0;
+  const secsLeft = (nextMatchAfter(simHours) - simHours) / speed;
+  const win = Math.min(3, 0.6 * sched.p / speed);
+  return win < 0.3 ? 0 : Math.max(0, 1 - secsLeft / win);
+}
 
 function frame(ts) {
   const speed = +$("speed").value;
-  // Clamp dt so a backgrounded tab doesn't jump the clocks forward.
-  if (last !== null && playing) simHours += Math.min(ts - last, 100) / 1000 * speed;
+  const dt = last === null ? 0 : Math.min(ts - last, 100) / 1000;
   last = ts;
+  const tens = tension(speed);
+  if (playing && ts >= holdUntil) {
+    // Slow-mo as they close in.
+    const eff = speed * (1 - 0.8 * tens * tens);
+    const target = nextMatchAfter(simHours);
+    simHours += dt * eff;
+    if (simHours >= target) {
+      simHours = target; // land exactly on the match so the freeze-frame shows identical faces
+      if (drama) kapow(ts);
+    }
+  }
   const c = matchesUpTo(simHours);
-  if (c !== Infinity && c > count) flashUntil = ts + 700;
   count = c;
+  suspense(ts, dt, playing && ts >= holdUntil ? tens : 0);
   setHands(A, a0 + simHours, playing ? speed : 0);
   setHands(B, b0 + r * simHours, playing ? speed * r : 0);
-  $("tA").textContent = fmtClock(a0 + simHours);
-  $("tB").textContent = fmtClock(b0 + r * simHours);
+  $("tA").textContent = fmtFace(a0 + simHours);
+  $("tB").textContent = fmtFace(b0 + r * simHours);
   $("elapsed").textContent = `${Math.floor(simHours / 24)}d ${fmtClock(simHours)}`;
   $("count").textContent = c === Infinity ? "always" : c;
   let next = "never";
@@ -414,8 +463,85 @@ function frame(ts) {
     next = fmtDur(t1 + k * p - simHours);
   }
   $("next").textContent = next;
-  $("flash").style.opacity = ts < flashUntil ? 1 : 0;
   requestAnimationFrame(frame);
+}
+
+function suspense(ts, dt, tens) {
+  // Heartbeat that speeds up from ~1 to ~5 beats/sec.
+  const bpsNow = 1 + 4 * tens;
+  const prev = beatPhase;
+  beatPhase = (beatPhase + dt * bpsNow) % 1;
+  if (tens > 0.05 && beatPhase < prev) beep(220 + 440 * tens, 0.05, 0.04 + 0.08 * tens);
+  const pulse = Math.pow(Math.sin(Math.PI * beatPhase), 8);
+  const scale = reduceMotion ? 1 : 1 + 0.04 * tens * pulse;
+  for (const c of [A, B]) c.svg.style.transform = `scale(${scale})`;
+
+  // Each clock shows a dotted ghost of the other's hour hand, so you can watch them close in.
+  A.ghost.setAttribute("transform", B.hour.getAttribute("transform") || "");
+  B.ghost.setAttribute("transform", A.hour.getAttribute("transform") || "");
+  A.ghost.setAttribute("opacity", tens * 0.9);
+  B.ghost.setAttribute("opacity", tens * 0.9);
+
+  const stage = $("stage");
+  const glow = tens * (0.5 + 0.5 * pulse);
+  stage.style.boxShadow = glow > 0.01 ? `0 0 ${10 + 40 * glow}px ${glow * 8}px color-mix(in srgb, var(--b) ${Math.round(glow * 60)}%, transparent)` : "";
+  if (!reduceMotion && ts < shakeUntil) {
+    const k = (shakeUntil - ts) / 450 * 8;
+    stage.style.transform = `translate(${(Math.random() - .5) * k}px, ${(Math.random() - .5) * k}px)`;
+  } else stage.style.transform = "";
+  $("next").classList.toggle("tension", tens > 0.3);
+  drawParticles(dt);
+}
+
+function kapow(ts) {
+  const speed = +$("speed").value;
+  // Freeze on the match, but not so long it stalls fast playback.
+  holdUntil = ts + Math.min(1100, Math.max(250, 0.5 * sched.p / speed * 1000));
+  shakeUntil = ts + 450;
+  const k = $("kapow");
+  k.classList.remove("go"); void k.offsetWidth; k.classList.add("go");
+  burst();
+  if (sound) { beep(523, 0.35, 0.2); beep(659, 0.35, 0.2, 0.06); beep(784, 0.5, 0.25, 0.12); beep(1047, 0.6, 0.2, 0.18); }
+}
+
+// Confetti on a canvas over the clocks.
+let particles = [];
+function burst() {
+  if (reduceMotion) return;
+  const cv = $("fx"), css = getComputedStyle(document.documentElement);
+  const colors = ["--a", "--b", "--hit"].map(v => css.getPropertyValue(v).trim());
+  const w = cv.clientWidth, h = cv.clientHeight;
+  for (let i = 0; i < 120; i++) {
+    const ang = Math.random() * Math.PI * 2, v = 250 + Math.random() * 550;
+    particles.push({ x: w / 2, y: h * 0.42, vx: Math.cos(ang) * v, vy: Math.sin(ang) * v - 200,
+      rot: Math.random() * 6, vr: (Math.random() - .5) * 20, life: 1.4 + Math.random() * 0.6,
+      size: 5 + Math.random() * 6, color: colors[i % 3] });
+  }
+}
+function drawParticles(dt) {
+  const cv = $("fx");
+  if (!particles.length) { if (cv.width) cv.width = 0; return; }
+  const dpr = devicePixelRatio || 1, w = cv.clientWidth, h = cv.clientHeight;
+  if (cv.width !== Math.round(w * dpr)) { cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); }
+  const ctx = cv.getContext("2d");
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, w, h);
+  particles = particles.filter(q => (q.life -= dt) > 0);
+  for (const q of particles) {
+    q.vy += 900 * dt; q.vx *= 0.99; q.x += q.vx * dt; q.y += q.vy * dt; q.rot += q.vr * dt;
+    ctx.save(); ctx.globalAlpha = Math.min(1, q.life); ctx.translate(q.x, q.y); ctx.rotate(q.rot);
+    ctx.fillStyle = q.color; ctx.fillRect(-q.size / 2, -q.size / 4, q.size, q.size / 2); ctx.restore();
+  }
+}
+
+function beep(freq, dur, vol, delay = 0) {
+  if (!sound) return;
+  audio ||= new AudioContext();
+  const t = audio.currentTime + delay, o = audio.createOscillator(), g = audio.createGain();
+  o.type = "triangle"; o.frequency.value = freq;
+  g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(vol, t + 0.01);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  o.connect(g).connect(audio.destination); o.start(t); o.stop(t + dur + 0.05);
 }
 
 for (const [name, v] of PRESETS) {
@@ -431,6 +557,11 @@ for (const id of ["pct", "startA", "startB"]) {
 $("dial").addEventListener("change", recompute);
 $("range").addEventListener("change", drawTimeline);
 $("reset").addEventListener("click", resetSim);
+const toggle = (id, label, get, set) => $(id).addEventListener("click", () => {
+  set(!get()); $(id).textContent = `${label}: ${get() ? "on" : "off"}`; $(id).setAttribute("aria-pressed", get());
+});
+toggle("drama", "Drama", () => drama, v => drama = v);
+toggle("sound", "Sound", () => sound, v => { sound = v; if (v) (audio ||= new AudioContext()).resume(); });
 $("play").addEventListener("click", () => { playing = !playing; $("play").textContent = playing ? "Pause" : "Play"; });
 window.addEventListener("resize", drawTimeline);
 

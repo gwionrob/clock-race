@@ -53,6 +53,10 @@ There's also a 24-hour dial toggle. With a 24-hour face every number above halve
 
 You can set a start time for each clock. They still match every `12 / |1 − 1/x|` hours, but the first match comes sooner because the clocks are already part of the way there. If Clock A is `g` hours ahead at the start, the first match is at `(12 − g) / (1 − 1/x)` hours, wrapping `g` to the 0–12 range. That assumes the slow clock is the one being lapped.
 
+### Drama mode
+
+As a match gets close, the clocks start to throb like a heartbeat that speeds up, the panel glows, playback slows down, and each clock shows a dotted ghost of the other clock's hour hand so you can watch them close in. When they line up, everything freezes on the exact moment, shakes, and bursts into confetti with a big **MATCH!** There's an optional sound toggle for the heartbeat ticks and a chime. Turn it all off with the *Drama* button. Shaking and confetti also switch off if your system is set to reduce motion.
+
 ### Plain-English mode
 
 The page doesn't make you think in "1/x". You pick Clock B's speed from buttons like *Half speed* or *Quarter speed*, or type a percentage. The answer and explanation are written in plain sentences. The algebra is still there behind a "Show the algebra" toggle for anyone who wants it.
