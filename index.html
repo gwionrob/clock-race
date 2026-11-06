@@ -1,0 +1,274 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Clock Race</title>
+<style>
+  :root {
+    --bg: #f7f5f0; --panel: #ffffff; --ink: #1d1d1f; --muted: #6b6b70; --line: #e2dfd8;
+    --a: #2563eb; --b: #e0592a; --hit: #16a34a;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #141416; --panel: #1e1e22; --ink: #ececef; --muted: #9a9aa2; --line: #2e2e34;
+      --a: #6b9cff; --b: #ff8a5c; --hit: #4ade80; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+    font: 16px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 960px; margin: 0 auto; padding: 32px 16px 64px; }
+  h1 { font-size: 2rem; margin: 0 0 4px; letter-spacing: -0.02em; }
+  .sub { color: var(--muted); margin: 0 0 24px; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 20px; margin-bottom: 16px; }
+  .controls { display: flex; flex-wrap: wrap; gap: 16px 28px; align-items: end; }
+  label { display: flex; flex-direction: column; gap: 4px; font-size: 0.85rem; color: var(--muted); }
+  input[type=number] { width: 110px; font: inherit; font-size: 1.1rem; padding: 6px 10px; border-radius: 8px;
+    border: 1px solid var(--line); background: var(--bg); color: var(--ink); }
+  select, button { font: inherit; padding: 7px 12px; border-radius: 8px; border: 1px solid var(--line);
+    background: var(--bg); color: var(--ink); cursor: pointer; }
+  button.primary { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+  .clocks { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; text-align: center; }
+  .clocks svg { width: 100%; max-width: 260px; height: auto; }
+  .clocks h3 { margin: 4px 0 0; font-size: 1rem; }
+  .clocks .t { font-variant-numeric: tabular-nums; color: var(--muted); }
+  .status { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; margin-top: 12px;
+    font-variant-numeric: tabular-nums; }
+  .status b { font-size: 1.1rem; }
+  .flash { color: var(--hit); font-weight: 700; transition: opacity .4s; }
+  .answers { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+  .stat { border: 1px solid var(--line); border-radius: 10px; padding: 12px; }
+  .stat .k { font-size: 0.8rem; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+  .stat .v { font-size: 1.6rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .stat .n { font-size: 0.8rem; color: var(--muted); }
+  .timeline { width: 100%; height: 70px; display: block; }
+  .math { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.92rem;
+    background: var(--bg); border-radius: 8px; padding: 12px; overflow-x: auto; white-space: pre; }
+  .hint { color: var(--muted); font-size: 0.9rem; }
+  @media (max-width: 640px) {
+    .answers { grid-template-columns: 1fr 1fr; }
+    h1 { font-size: 1.6rem; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <h1>Clock Race</h1>
+  <p class="sub">Two clocks start together at midnight. One runs at normal speed, the other at <b>1/x</b> speed.
+    How often do they show the same time?</p>
+
+  <section class="panel controls">
+    <label>x (slow clock runs at 1/x speed)
+      <input id="x" type="number" value="2" min="0.05" step="0.1">
+    </label>
+    <label>Dial
+      <select id="dial">
+        <option value="12">12-hour (normal analog clock)</option>
+        <option value="24">24-hour</option>
+      </select>
+    </label>
+    <label>Simulation speed
+      <select id="speed">
+        <option value="0.5">30 min / sec</option>
+        <option value="2" selected>2 h / sec</option>
+        <option value="6">6 h / sec</option>
+        <option value="24">1 day / sec</option>
+      </select>
+    </label>
+    <button id="play" class="primary">Pause</button>
+    <button id="reset">Reset</button>
+  </section>
+
+  <section class="panel">
+    <div class="clocks">
+      <div><svg id="clockA" viewBox="-110 -110 220 220"></svg><h3 style="color:var(--a)">Normal clock</h3><div class="t" id="tA"></div></div>
+      <div><svg id="clockB" viewBox="-110 -110 220 220"></svg><h3 style="color:var(--b)" id="labelB"></h3><div class="t" id="tB"></div></div>
+    </div>
+    <div class="status">
+      <span>Real time elapsed: <b id="elapsed"></b></span>
+      <span>Matches so far: <b id="count">0</b> <span id="flash" class="flash" style="opacity:0">● MATCH</span></span>
+      <span>Next match in: <b id="next"></b></span>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2 style="margin-top:0">The answer</h2>
+    <div class="answers">
+      <div class="stat"><div class="k">They match every</div><div class="v" id="period"></div><div class="n">real time</div></div>
+      <div class="stat"><div class="k">Per day</div><div class="v" id="perDay"></div><div class="n" id="perDayN"></div></div>
+      <div class="stat"><div class="k">Per week</div><div class="v" id="perWeek"></div><div class="n" id="perWeekN"></div></div>
+      <div class="stat"><div class="k">Per 30-day month</div><div class="v" id="perMonth"></div><div class="n" id="perMonthN"></div></div>
+    </div>
+    <p class="hint">Counts are matches <i>after</i> the shared midnight start (add 1 if you count the start itself).
+      Non-integer rates are the long-run average.</p>
+
+    <h3>Every match in one
+      <select id="range"><option value="24">day</option><option value="168" selected>week</option><option value="720">30-day month</option></select>
+    </h3>
+    <svg class="timeline" id="timeline"></svg>
+  </section>
+
+  <section class="panel">
+    <h2 style="margin-top:0">Why</h2>
+    <div class="math" id="math"></div>
+    <p class="hint">Sanity check: as x → ∞ the slow clock basically stops, and a stopped clock is right
+      <b>twice a day</b> (12-hour dial). At x = 1 they're the same clock and agree constantly.</p>
+  </section>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+const NS = "http://www.w3.org/2000/svg";
+const el = (tag, attrs, parent) => {
+  const e = document.createElementNS(NS, tag);
+  for (const k in attrs) e.setAttribute(k, attrs[k]);
+  if (parent) parent.appendChild(e);
+  return e;
+};
+
+function buildClock(svg, color) {
+  el("circle", { r: 100, fill: "var(--panel)", stroke: "var(--line)", "stroke-width": 4 }, svg);
+  for (let i = 0; i < 60; i++) {
+    const a = i * Math.PI / 30, big = i % 5 === 0, r1 = big ? 84 : 91;
+    el("line", { x1: r1 * Math.sin(a), y1: -r1 * Math.cos(a), x2: 96 * Math.sin(a), y2: -96 * Math.cos(a),
+      stroke: "var(--muted)", "stroke-width": big ? 3 : 1 }, svg);
+  }
+  const numbers = el("g", {}, svg);
+  const hour = el("line", { x1: 0, y1: 0, x2: 0, y2: -50, stroke: color, "stroke-width": 7, "stroke-linecap": "round" }, svg);
+  const min = el("line", { x1: 0, y1: 0, x2: 0, y2: -78, stroke: color, "stroke-width": 4, "stroke-linecap": "round" }, svg);
+  el("circle", { r: 6, fill: color }, svg);
+  return { hour, min, numbers };
+}
+
+function drawNumbers(c, dial) {
+  c.numbers.innerHTML = "";
+  for (let i = 1; i <= 12; i++) {
+    const a = i * Math.PI / 6, label = dial === 24 ? i * 2 : i;
+    const t = el("text", { x: 70 * Math.sin(a), y: -70 * Math.cos(a) + 6, "text-anchor": "middle",
+      "font-size": 15, fill: "var(--ink)" }, c.numbers);
+    t.textContent = label;
+  }
+}
+
+const A = buildClock($("clockA"), "var(--a)");
+const B = buildClock($("clockB"), "var(--b)");
+
+let x = 2, dial = 12, simHours = 0, playing = true, last = null, count = 0, flashUntil = 0;
+
+const fmtClock = h => {
+  h = ((h % 24) + 24) % 24;
+  const hh = Math.floor(h), mm = Math.floor((h - hh) * 60);
+  return String(hh).padStart(2, "0") + ":" + String(mm).padStart(2, "0");
+};
+const fmtDur = h => {
+  if (!isFinite(h)) return "never";
+  if (h < 1) return (h * 60).toFixed(1).replace(/\.0$/, "") + " min";
+  if (h < 48) return (+h.toFixed(2)) + " h";
+  return (+(h / 24).toFixed(2)) + " days";
+};
+const fmtNum = n => Number.isInteger(n) ? String(n) : n.toFixed(2);
+
+function setHands(c, hours) {
+  // hour hand: one lap per dial; minute hand: one lap per hour
+  const hDeg = (hours % dial) / dial * 360;
+  const mDeg = (hours % 1) * 360;
+  c.hour.setAttribute("transform", `rotate(${hDeg})`);
+  c.min.setAttribute("transform", `rotate(${mDeg})`);
+}
+
+// Relative drift per real hour, and the gap between matches.
+const drift = () => Math.abs(1 - 1 / x);
+const period = () => drift() === 0 ? 0 : dial / drift();
+
+function recompute() {
+  x = Math.max(0.05, parseFloat($("x").value) || 1);
+  dial = +$("dial").value;
+  drawNumbers(A, dial); drawNumbers(B, dial);
+  $("labelB").textContent = x === 1 ? "Same speed" : x > 1 ? `Slow clock (1/${fmtNum(x)} speed)` : `Fast clock (${fmtNum(1 / x)}× speed)`;
+
+  const p = period();
+  const always = p === 0;
+  $("period").textContent = always ? "always" : fmtDur(p);
+  const rows = [["perDay", 24], ["perWeek", 168], ["perMonth", 720]];
+  for (const [id, H] of rows) {
+    if (always) { $(id).textContent = "∞"; $(id + "N").textContent = "identical clocks"; continue; }
+    const exact = H / p;
+    $(id).textContent = Math.floor(exact + 1e-9);
+    $(id + "N").textContent = Number.isInteger(+exact.toFixed(9)) ? "exactly" : `avg ${exact.toFixed(3)}`;
+  }
+
+  const d = drift();
+  $("math").textContent =
+`Normal clock after t real hours shows:   t
+Other clock after t real hours shows:    t / x  =  t / ${fmtNum(x)}
+
+They show the same time when the gap is a whole number of dial laps (${dial} h):
+  t − t/x  =  k · ${dial}
+  t · |1 − 1/x|  =  k · ${dial}
+  t  =  k · ${dial} / |1 − 1/x|  =  k · ${always ? "∞" : fmtNum(+p.toFixed(4))} h
+
+So matches per day  =  24 · |1 − 1/x| / ${dial}  =  ${always ? "∞" : fmtNum(+(24 * d / dial).toFixed(4))}`;
+
+  drawTimeline();
+  resetSim();
+}
+
+function drawTimeline() {
+  const svg = $("timeline"), H = +$("range").value, p = period();
+  svg.innerHTML = "";
+  const W = svg.clientWidth || 800, pad = 12, y = 30;
+  svg.setAttribute("viewBox", `0 0 ${W} 70`);
+  const sx = h => pad + (h / H) * (W - 2 * pad);
+  el("line", { x1: pad, x2: W - pad, y1: y, y2: y, stroke: "var(--line)", "stroke-width": 4, "stroke-linecap": "round" }, svg);
+  // day ticks
+  const dayStep = H > 200 ? 168 : 24;
+  for (let d = 0; d <= H; d += (H === 24 ? 6 : dayStep)) {
+    el("line", { x1: sx(d), x2: sx(d), y1: y + 6, y2: y + 12, stroke: "var(--muted)" }, svg);
+    const t = el("text", { x: sx(d), y: y + 28, "text-anchor": "middle", "font-size": 11, fill: "var(--muted)" }, svg);
+    t.textContent = H === 24 ? `${d}h` : dayStep === 168 ? `wk ${d / 168}` : `day ${d / 24}`;
+  }
+  if (p === 0) return;
+  const n = Math.floor(H / p + 1e-9);
+  if (n > 400) {
+    const t = el("text", { x: W / 2, y: y - 10, "text-anchor": "middle", "font-size": 12, fill: "var(--hit)" }, svg);
+    t.textContent = `${n} matches — too many to draw`;
+    return;
+  }
+  for (let k = 0; k <= n; k++) {
+    el("circle", { cx: sx(k * p), cy: y, r: k === 0 ? 4 : 6, fill: k === 0 ? "var(--muted)" : "var(--hit)" }, svg);
+  }
+}
+
+function resetSim() { simHours = 0; count = 0; last = null; }
+
+function frame(ts) {
+  if (last !== null && playing) simHours += (ts - last) / 1000 * +$("speed").value;
+  last = ts;
+  const p = period();
+  if (p > 0) {
+    const c = Math.floor(simHours / p + 1e-9);
+    if (c > count) flashUntil = ts + 700;
+    count = c;
+  }
+  setHands(A, simHours);
+  setHands(B, simHours / x);
+  $("tA").textContent = fmtClock(simHours);
+  $("tB").textContent = fmtClock(simHours / x);
+  $("elapsed").textContent = `${Math.floor(simHours / 24)}d ${fmtClock(simHours)}`;
+  $("count").textContent = p === 0 ? "∞" : count;
+  $("next").textContent = p === 0 ? "now" : fmtDur((count + 1) * p - simHours);
+  $("flash").style.opacity = ts < flashUntil ? 1 : 0;
+  requestAnimationFrame(frame);
+}
+
+$("x").addEventListener("input", recompute);
+$("dial").addEventListener("change", recompute);
+$("range").addEventListener("change", drawTimeline);
+$("reset").addEventListener("click", resetSim);
+$("play").addEventListener("click", () => { playing = !playing; $("play").textContent = playing ? "Pause" : "Play"; });
+window.addEventListener("resize", drawTimeline);
+
+recompute();
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
