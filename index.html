@@ -136,7 +136,7 @@
       <button id="play" class="primary">Pause</button>
       <button id="reset">Restart</button>
       <button id="drama" aria-pressed="true">Drama: on</button>
-      <button id="sound" aria-pressed="false">Sound: off</button>
+      <button id="sound" aria-pressed="true">Sound: on</button>
     </div>
   </section>
 
@@ -231,7 +231,7 @@ const B = buildClock($("clockB"), "var(--b)");
 // State. r = Clock B's speed as a fraction of normal (0.5 = half speed).
 let r = 0.5, dial = 12, a0 = 0, b0 = 0, simHours = 0, playing = true, last = null, count = 0;
 // Drama: heartbeat/slow-mo as a match nears, freeze + burst when it lands.
-let drama = true, sound = false, holdUntil = 0, beatPhase = 0, shakeUntil = 0, audio = null;
+let drama = true, sound = true, holdUntil = 0, beatPhase = 0, shakeUntil = 0, audio = null;
 const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
 // Match schedule: first match at t1, then every p hours. mode: "always" | "never" | "periodic".
 let sched = { mode: "periodic", t1: 0, p: 24 };
@@ -536,8 +536,7 @@ function drawParticles(dt) {
 }
 
 function beep(freq, dur, vol, delay = 0) {
-  if (!sound) return;
-  audio ||= new AudioContext();
+  if (!sound || !audio || audio.state !== "running") return;
   const t = audio.currentTime + delay, o = audio.createOscillator(), g = audio.createGain();
   o.type = "triangle"; o.frequency.value = freq;
   g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(vol, t + 0.01);
@@ -563,6 +562,10 @@ const toggle = (id, label, get, set) => $(id).addEventListener("click", () => {
 });
 toggle("drama", "Drama", () => drama, v => drama = v);
 toggle("sound", "Sound", () => sound, v => { sound = v; if (v) (audio ||= new AudioContext()).resume(); });
+// Browsers keep audio locked until the first click or key press, so unlock it then.
+const unlockAudio = () => { if (sound) (audio ||= new AudioContext()).resume(); };
+addEventListener("pointerdown", unlockAudio, { once: true });
+addEventListener("keydown", unlockAudio, { once: true });
 $("play").addEventListener("click", () => { playing = !playing; $("play").textContent = playing ? "Pause" : "Play"; });
 window.addEventListener("resize", drawTimeline);
 

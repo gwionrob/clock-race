@@ -55,7 +55,7 @@ You can set a start time for each clock. They still match every `12 / |1 − 1/x
 
 ### Drama mode
 
-As a match gets close, the clocks start to throb like a heartbeat that speeds up, the panel glows, playback slows down, and each clock shows a dotted ghost of the other clock's hour hand so you can watch them close in. When they line up, everything freezes on the exact moment, shakes, and bursts into confetti with a big **MATCH!** There's an optional sound toggle for the heartbeat ticks and a chime. Turn it all off with the *Drama* button. Shaking and confetti also switch off if your system is set to reduce motion.
+As a match gets close, the clocks start to throb like a heartbeat that speeds up, the panel glows, playback slows down, and each clock shows a dotted ghost of the other clock's hour hand so you can watch them close in. When they line up, everything freezes on the exact moment, shakes, and bursts into confetti with a big **MATCH!** Sound (heartbeat ticks and a chime) is on by default and kicks in after your first click on the page, since browsers block audio until then. The *Sound* button mutes it. Turn it all off with the *Drama* button. Shaking and confetti also switch off if your system is set to reduce motion.
 
 ### Plain-English mode
 
