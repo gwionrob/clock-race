@@ -52,8 +52,9 @@
   #count { min-width: 4ch; }
   #next { min-width: 11ch; text-align: right; }
   .flash { color: var(--hit); font-weight: 700; transition: opacity .4s; }
+  .given { color: var(--muted); margin: 0 0 6px; }
   .headline { font-size: 1.25rem; line-height: 1.45; margin: 0 0 16px; }
-  .answers { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  .answers { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
   .stat { border: 1px solid var(--line); border-radius: 10px; padding: 12px; }
   .stat .k { font-size: 0.8rem; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
   .stat .v { font-size: 1.8rem; font-weight: 700; font-variant-numeric: tabular-nums; }
@@ -67,7 +68,7 @@
   .hint { color: var(--muted); font-size: 0.9rem; }
   @media (max-width: 640px) {
     .setup { grid-template-columns: 1fr; }
-    .answers { grid-template-columns: 1fr; }
+    .answers { grid-template-columns: 1fr 1fr; }
     .status { grid-template-columns: 1fr; }
     .status > :last-child { text-align: left; }
     #next { text-align: left; }
@@ -137,13 +138,15 @@
 
   <section class="panel">
     <h2>The answer</h2>
+    <p class="given" id="given"></p>
     <p class="headline" id="headline"></p>
     <div class="answers">
+      <div class="stat"><div class="k">First match</div><div class="v" id="first"></div><div class="n" id="firstN"></div></div>
       <div class="stat"><div class="k">In the first day</div><div class="v" id="perDay"></div><div class="n" id="perDayN"></div></div>
       <div class="stat"><div class="k">In the first week</div><div class="v" id="perWeek"></div><div class="n" id="perWeekN"></div></div>
       <div class="stat"><div class="k">In the first 30 days</div><div class="v" id="perMonth"></div><div class="n" id="perMonthN"></div></div>
     </div>
-    <p class="hint">If both clocks start at the same time, that starting moment isn't counted.</p>
+    <p class="hint" id="answerHint"></p>
 
     <h3>Every match in one
       <select id="range"><option value="24">day</option><option value="168" selected>week</option><option value="720">30 days</option></select>
@@ -234,6 +237,12 @@ const fmtHuman = h => {
   }
   return `${+(h / 24).toFixed(1)} days`;
 };
+// What the clock face reads: "3:00" on a 12-hour face, "15:00" on a 24-hour one.
+const fmtFace = h => {
+  if (dial === 24) return fmtClock(h);
+  const t = mod(h, 12), hh = Math.floor(t + EPS / 60), mm = Math.floor((t - hh) * 60 + EPS);
+  return `${hh === 0 ? 12 : hh}:${String(mm).padStart(2, "0")}`;
+};
 const perDayText = n => Math.abs(n - Math.round(n)) < 1e-6
   ? `<b>${plural(Math.round(n), "time")} a day</b>`
   : `about <b>${+n.toFixed(2)} times a day</b> on average`;
@@ -287,9 +296,14 @@ function recompute() {
     `For every hour that really passes, Clock B moves ${fmtHuman(r)}` +
     (r < 1 ? `, so it falls ${fmtHuman(1 - r)} behind every hour.` : `, so it gains ${fmtHuman(r - 1)} every hour.`);
 
-  // Headline
+  // Answer: restate the setup, then the result.
   const same = mod(a0 - b0, dial) < EPS;
-  if (sched.mode === "always") $("headline").textContent = "They're the same clock, so they always show the same time.";
+  const bMotion = r === 0 ? "is stopped" : r === 1 ? "runs at normal speed" : `runs at ${speedName(r)}`;
+  $("given").textContent = same
+    ? `Both clocks start at ${fmtFace(a0)}. Clock B ${bMotion}.`
+    : `Clock A starts at ${fmtFace(a0)}. Clock B starts at ${fmtFace(b0)} and ${bMotion}.`;
+
+  if (sched.mode === "always") $("headline").textContent = "They're effectively the same clock, so they always show the same time.";
   else if (sched.mode === "never") $("headline").textContent = "They tick at the same speed but started at different times, so they never match.";
   else {
     const { t1, p } = sched;
@@ -297,6 +311,18 @@ function recompute() {
     $("headline").innerHTML = (first ? first : "They show the same time ") +
       `<b>every ${fmtHuman(p)}</b>. That's ${perDayText(24 / p)}.`;
   }
+
+  if (sched.mode === "periodic") {
+    const tFirst = sched.t1 < EPS ? sched.p : sched.t1;
+    $("first").textContent = fmtFace(a0 + tFirst);
+    $("firstN").textContent = `both read this, after ${fmtHuman(tFirst)}`;
+  } else {
+    $("first").textContent = sched.mode === "always" ? "Now" : "Never";
+    $("firstN").textContent = "";
+  }
+  $("answerHint").textContent = sched.mode !== "periodic" ? "" : same
+    ? `They start out matching at ${fmtFace(a0)}. That starting moment isn't counted.`
+    : `Counting starts from when you set the clocks going.`;
 
   for (const [id, H] of [["perDay", 24], ["perWeek", 168], ["perMonth", 720]]) {
     const n = matchesUpTo(H);
@@ -398,7 +424,10 @@ for (const [name, v] of PRESETS) {
   b.addEventListener("click", () => { $("pct").value = +v.toFixed(4); recompute(); });
   $("presets").appendChild(b);
 }
-for (const id of ["pct", "startA", "startB"]) $(id).addEventListener("input", recompute);
+for (const id of ["pct", "startA", "startB"]) {
+  $(id).addEventListener("input", recompute);
+  $(id).addEventListener("change", recompute);
+}
 $("dial").addEventListener("change", recompute);
 $("range").addEventListener("change", drawTimeline);
 $("reset").addEventListener("click", resetSim);
